@@ -76,60 +76,51 @@ pub async fn get_pokemon(cx: Scope, gen: String) -> Result<Vec<MoveSet>, ServerF
 pub fn app(cx: Scope) -> impl IntoView {
     provide_meta_context(cx);
 
-    let on_click = create_action(cx, |_: &()| async { () });
+    let (get_args, set_args) = create_signal(cx, ("sv".to_string(), 0));
 
-    let pokemon = create_resource_with_initial_value(
-        cx,
-        move || (on_click.version().get()),
-        move |_| get_pokemon(cx, "sv".to_string()),
-        Some(Ok(vec![])),
-    );
+    let pokemon = create_resource(cx, get_args, move |(gen, _)| get_pokemon(cx, gen));
+
+    let pokemon_view = move || {
+        match pokemon.read() {
+            Some(resp) => {
+                resp.iter().flatten().map(|p: &MoveSet| {
+                    view!{
+                        cx,
+                        <div class="my-6">{
+                            p.to_string().split('\n').map(|s| {
+                                view! {
+                                    cx,
+                                    <p>{s.to_string()}</p>
+                                }
+                            }).collect::<Vec<_>>().into_view(cx)
+                        }</div>
+                    }
+                }).collect::<Vec<_>>().into_view(cx)
+            }
+            None => {
+                view! {
+                    cx,
+                    <div><p>"Click Get Pokemon"</p></div>
+                }.into_view(cx)
+            }
+        }
+    };
 
     view! {
         cx,
         <Stylesheet id="leptos" href="/pkg/showdown-hunter.css"/>
         <Router>
-            <main class="my-0 mx-auto max-w-3xl text-center text-sm">
-                <button on:click=move |_| on_click.dispatch(())>"Get Pokemon"</button>
-                {move || {
-                    let p = pokemon.read().map(|res| match res {
-                        Ok(pokemon) => {
-                            if pokemon.is_empty() {
-                                view! {
-                                    cx,
-                                    <div class="my-6"><p>"Click Get Pokemon"</p></div>
-                                }.into_view(cx)
-                            } else {
-                                pokemon.iter().map(|p| {
-                                    view! {
-                                        cx,
-                                        <div class="my-6">
-                                            {
-                                                p.to_string().split('\n').map(|s| {
-                                                    view!{
-                                                        cx,
-                                                        <p>{s.to_string()}</p>
-                                                    }
-                                                }).collect::<Vec<_>>().into_view(cx)
-                                            }
-                                        </div>
-                                    }
-                                }).collect::<Vec<_>>().into_view(cx)
-                            }
-                        },
-                        Err(e) => {
-                            view! {
-                                cx,
-                                <div class="my-6"><p>{e.to_string()}</p></div>
-                            }.into_view(cx)
-                        }
-                    }).unwrap_or_default();
-                    view! {
-                        cx,
-                        {p}
-                    }
-                }}
-            </main>
+            <Routes>
+                <Route path="" view=move |cx| view! {
+                    cx,
+                    <main class="my-0 mx-auto max-w-3xl text-center text-sm">
+                        <button on:click=move |_| set_args.set(("sv".to_string(), get_args.get().1 + 1))>"Get Pokemon"</button>
+                        <Suspense fallback=move || view! {cx, <div>"Loading..."</div>}>
+                            {pokemon_view}
+                        </Suspense>
+                    </main>
+                }/>
+            </Routes>
         </Router>
     }
 }
